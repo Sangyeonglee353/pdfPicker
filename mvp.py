@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from pptx import Presentation
 from pptx.util import Inches
+import os  # 파일 상단에 추가
 
 class PDFCaptureApp:
     def __init__(self, root):
@@ -42,11 +43,20 @@ class PDFCaptureApp:
         self.doc = None
         self.current_page_index = 0
         self.capture_data = []  # (page_index, rect)
+        self.capture_dir = "capture"  # 캡처 폴더 경로 추가
+        if not os.path.exists(self.capture_dir):
+            os.makedirs(self.capture_dir)
 
     def load_pdf(self):
         self.pdf_path = filedialog.askopenfilename(filetypes=[("PDF 파일", "*.pdf")])
         if not self.pdf_path:
             return
+
+        # PDF 파일명으로 폴더 생성
+        pdf_name = os.path.splitext(os.path.basename(self.pdf_path))[0]
+        self.current_capture_dir = os.path.join(self.capture_dir, pdf_name)
+        if not os.path.exists(self.current_capture_dir):
+            os.makedirs(self.current_capture_dir)
 
         self.doc = fitz.open(self.pdf_path)
         self.current_page_index = 0
@@ -59,7 +69,7 @@ class PDFCaptureApp:
     def load_page_image(self):
         page = self.doc.load_page(self.current_page_index)
         pix = page.get_pixmap()
-        self.image_path = "page_preview.png"
+        self.image_path = os.path.join(self.current_capture_dir, "page_preview.png")
         pix.save(self.image_path)
 
         img = Image.open(self.image_path)
@@ -109,11 +119,21 @@ class PDFCaptureApp:
             self.rect_start = None
 
     def save_ppt(self):
+        if not self.capture_data:
+            messagebox.showwarning("경고", "선택한 영역이 없습니다.")
+            return
+
+        first_page_rect = self.get_first_page_rect()
+        if not first_page_rect:
+            messagebox.showwarning("경고", "첫 번째 페이지에서 영역을 선택해주세요.")
+            return
+
         prs = Presentation()
-        for page_index, rect in self.capture_data:
+        # 모든 페이지에 대해 첫 번째 페이지의 선택 영역 적용
+        for page_index in range(len(self.doc)):
             page = self.doc.load_page(page_index)
-            pix = page.get_pixmap(clip=rect)
-            img_path = f"temp_capture_{page_index}.png"
+            pix = page.get_pixmap(clip=first_page_rect)
+            img_path = os.path.join(self.current_capture_dir, f"temp_capture_{page_index}.png")
             pix.save(img_path)
 
             slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -123,10 +143,25 @@ class PDFCaptureApp:
             slide.shapes.add_picture(img_path, Inches(1), Inches(1),
                                      width=Inches(width_inch), height=Inches(height_inch))
 
-        save_path = filedialog.asksaveasfilename(defaultextension=".pptx", filetypes=[("PowerPoint 파일", "*.pptx")])
+        # PPT 파일도 캡처 폴더에 저장
+        default_ppt_name = os.path.join(self.current_capture_dir, "presentation.pptx")
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pptx",
+            filetypes=[("PowerPoint 파일", "*.pptx")],
+            initialfile=os.path.basename(default_ppt_name)
+        )
         if save_path:
             prs.save(save_path)
             messagebox.showinfo("저장 완료", f"PPT가 '{save_path}'에 저장되었습니다.")
+
+    def get_first_page_rect(self):
+        if not self.capture_data:
+            return None
+        # 첫 번째 페이지의 선택 영역 반환
+        for page_index, rect in self.capture_data:
+            if page_index == 0:
+                return rect
+        return None
 
 if __name__ == "__main__":
     root = tk.Tk()
