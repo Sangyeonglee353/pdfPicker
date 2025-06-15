@@ -9,7 +9,7 @@ import os  # 파일 상단에 추가
 class PDFCaptureApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("PDF PICKER | PDF 여러 페이지 캡처 → PPT 저장기")
+        self.root.title("PDF PICKER | PDF 여러 페이지 캡처 → PPT 저장기 | by sangyeong lee")
         self.root.minsize(800, 600)  # 최소 창 크기 설정
 
         # 스타일 설정
@@ -101,7 +101,7 @@ class PDFCaptureApp:
         # 상태바 추가
         self.status_bar = ttk.Label(root, text="PDF 파일을 열어주세요", relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
+        
         # 기존 변수들 초기화
         self.rect_start = None
         self.rect_id = None

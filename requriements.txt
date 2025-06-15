@@ -1,4 +1,0 @@
-fitz
-PyMuPDF 
-Pillow 
-python-pptx
