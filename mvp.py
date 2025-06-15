@@ -9,12 +9,13 @@ import os  # 파일 상단에 추가
 class PDFCaptureApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("PDF 여러 페이지 캡처 → PPT 저장기")
+        self.root.title("PDF PICKER | PDF 여러 페이지 캡처 → PPT 저장기")
         self.root.minsize(800, 600)  # 최소 창 크기 설정
 
         # 스타일 설정
         style = ttk.Style()
         style.configure('Custom.TButton', padding=5)
+        style.configure('Title.TLabel', font=('맑은 고딕', 10, 'bold'))
         
         # 메인 프레임
         main_frame = ttk.Frame(root, padding="10")
@@ -24,55 +25,59 @@ class PDFCaptureApp:
         control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # PDF 관련 버튼들
-        pdf_frame = ttk.LabelFrame(control_frame, text="PDF 컨트롤", padding="5")
-        pdf_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        # PDF 탐색 버튼들
-        nav_frame = ttk.Frame(pdf_frame)
-        nav_frame.pack(side=tk.LEFT, fill=tk.X)
-
-        # 버튼 생성 전에 메서드들을 먼저 정의
-        self.load_button = ttk.Button(nav_frame, text="PDF 열기", command=self.load_pdf, style='Custom.TButton')
+        # 파일 열기 버튼
+        self.load_button = ttk.Button(control_frame, text="PDF 열기", command=self.load_pdf, style='Custom.TButton', width=12)
         self.load_button.pack(side=tk.LEFT, padx=5)
 
-        # 나머지 UI 요소들 생성
-        self.prev_button = ttk.Button(nav_frame, text="← 이전", command=self.prev_page, state=tk.DISABLED, style='Custom.TButton')
-        self.prev_button.pack(side=tk.LEFT, padx=5)
+        # 파일 이름 표시 레이블
+        self.file_name_label = ttk.Label(control_frame, text="파일: 없음", style='Title.TLabel', width=30)
+        self.file_name_label.pack(side=tk.LEFT, padx=5)
 
-        self.next_button = ttk.Button(nav_frame, text="다음 →", command=self.next_page, state=tk.DISABLED, style='Custom.TButton')
-        self.next_button.pack(side=tk.LEFT, padx=5)
+        # 구분선
+        ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+
+        # 페이지 이동 버튼들
+        self.prev_button = ttk.Button(control_frame, text="←", command=self.prev_page, state=tk.DISABLED, style='Custom.TButton', width=3)
+        self.prev_button.pack(side=tk.LEFT, padx=2)
+
+        self.page_info = ttk.Label(control_frame, text="페이지: 0/0", width=12)
+        self.page_info.pack(side=tk.LEFT, padx=2)
+
+        self.next_button = ttk.Button(control_frame, text="→", command=self.next_page, state=tk.DISABLED, style='Custom.TButton', width=3)
+        self.next_button.pack(side=tk.LEFT, padx=2)
+
+        # 구분선
+        ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
 
         # 확대/축소 버튼들
-        zoom_frame = ttk.Frame(pdf_frame)
-        zoom_frame.pack(side=tk.LEFT, fill=tk.X, padx=20)
-
-        self.zoom_out_button = ttk.Button(zoom_frame, text="축소 -", command=self.zoom_out, state=tk.DISABLED, style='Custom.TButton')
+        self.zoom_out_button = ttk.Button(control_frame, text="-", command=self.zoom_out, state=tk.DISABLED, style='Custom.TButton', width=3)
         self.zoom_out_button.pack(side=tk.LEFT, padx=2)
 
-        self.zoom_label = ttk.Label(zoom_frame, text="100%")
-        self.zoom_label.pack(side=tk.LEFT, padx=5)
+        self.zoom_label = ttk.Label(control_frame, text="100%", width=4)
+        self.zoom_label.pack(side=tk.LEFT, padx=2)
 
-        self.zoom_in_button = ttk.Button(zoom_frame, text="확대 +", command=self.zoom_in, state=tk.DISABLED, style='Custom.TButton')
+        self.zoom_in_button = ttk.Button(control_frame, text="+", command=self.zoom_in, state=tk.DISABLED, style='Custom.TButton', width=3)
         self.zoom_in_button.pack(side=tk.LEFT, padx=2)
 
-        self.fit_width_button = ttk.Button(zoom_frame, text="폭맞춤", command=self.fit_width, state=tk.DISABLED, style='Custom.TButton')
+        self.fit_width_button = ttk.Button(control_frame, text="폭맞춤", command=self.fit_width, state=tk.DISABLED, style='Custom.TButton', width=8)
         self.fit_width_button.pack(side=tk.LEFT, padx=5)
 
-        # 페이지 정보 표시
-        self.page_info = ttk.Label(pdf_frame, text="페이지: 0/0")
-        self.page_info.pack(side=tk.LEFT, padx=20)
+        # 구분선
+        ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
 
-        # 캡처 정보 표시
-        capture_frame = ttk.LabelFrame(control_frame, text="캡처 정보", padding="5")
-        capture_frame.pack(side=tk.RIGHT, fill=tk.X)
-
-        self.save_button = ttk.Button(capture_frame, text="PPT 저장", command=self.save_ppt, state=tk.DISABLED, style='Custom.TButton')
-        self.save_button.pack(side=tk.LEFT, padx=5)
-        
-        # 초기화 버튼 추가
-        self.reset_button = ttk.Button(capture_frame, text="영역 초기화", command=self.reset_captures, state=tk.DISABLED, style='Custom.TButton')
+        # 캡처 컨트롤 버튼들
+        self.reset_button = ttk.Button(control_frame, text="영역 초기화", command=self.reset_captures, state=tk.DISABLED, style='Custom.TButton', width=12)
         self.reset_button.pack(side=tk.LEFT, padx=5)
+
+        self.save_button = ttk.Button(control_frame, text="PPT 저장", command=self.save_ppt, state=tk.DISABLED, style='Custom.TButton', width=12)
+        self.save_button.pack(side=tk.LEFT, padx=5)
+
+        # 캡처 상태 표시
+        self.capture_status = ttk.Label(control_frame, text="캡처 영역: 0/2", width=12)
+        self.capture_status.pack(side=tk.LEFT, padx=5)
+        
+        # self.capture_guide = ttk.Label(control_frame, text="(최대 2개 영역 선택 가능)", style='Title.TLabel')
+        # self.capture_guide.pack(side=tk.LEFT, padx=5)
 
         # 캔버스 프레임
         canvas_frame = ttk.Frame(main_frame)
@@ -119,6 +124,10 @@ class PDFCaptureApp:
         self.canvas.bind("<ButtonPress-1>", self.on_mouse_down)
         self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_up)
+        
+        # 방향키 바인딩 추가
+        self.root.bind("<Left>", lambda e: self.prev_page())
+        self.root.bind("<Right>", lambda e: self.next_page())
 
         # 확대/축소 관련 변수 추가
         self.zoom_scale = 1.0
@@ -132,6 +141,9 @@ class PDFCaptureApp:
 
     def update_status(self, message):
         self.status_bar.config(text=message)
+        # 캡처 상태 업데이트
+        current_captures = sum(1 for page_idx, _ in self.capture_data if page_idx == self.current_page_index)
+        self.capture_status.config(text=f"캡처 영역: {current_captures}/{self.max_captures}")
 
     def update_page_info(self):
         if self.doc:
@@ -159,6 +171,9 @@ class PDFCaptureApp:
         if not os.path.exists(self.current_capture_dir):
             os.makedirs(self.current_capture_dir)
 
+        # 파일 이름 표시 업데이트
+        self.file_name_label.config(text=f"파일: {os.path.basename(self.pdf_path)}")
+        
         self.doc = fitz.open(self.pdf_path)
         self.current_page_index = 0
         self.capture_data = []
