@@ -69,6 +69,10 @@ class PDFCaptureApp:
 
         self.save_button = ttk.Button(capture_frame, text="PPT 저장", command=self.save_ppt, state=tk.DISABLED, style='Custom.TButton')
         self.save_button.pack(side=tk.LEFT, padx=5)
+        
+        # 초기화 버튼 추가
+        self.reset_button = ttk.Button(capture_frame, text="영역 초기화", command=self.reset_captures, state=tk.DISABLED, style='Custom.TButton')
+        self.reset_button.pack(side=tk.LEFT, padx=5)
 
         # 캔버스 프레임
         canvas_frame = ttk.Frame(main_frame)
@@ -120,6 +124,12 @@ class PDFCaptureApp:
         self.zoom_scale = 1.0
         self.original_image = None
 
+        # 캡처 관련 변수 추가
+        self.capture_colors = ["red", "blue"]  # 캡처 영역 색상
+        self.max_captures = 2  # 최대 캡처 개수
+        self.current_capture_index = 0  # 현재 캡처 인덱스
+        self.rect_ids = []  # 캡처 영역 테두리 ID 저장
+
     def update_status(self, message):
         self.status_bar.config(text=message)
 
@@ -156,6 +166,7 @@ class PDFCaptureApp:
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
         self.save_button.config(state=tk.NORMAL)
+        self.reset_button.config(state=tk.NORMAL)  # PDF 로드 시 초기화 버튼 활성화
         self.update_page_info()
         self.update_status(f"PDF 파일 로드됨: {os.path.basename(self.pdf_path)}")
         self.zoom_scale = 1.0
@@ -194,6 +205,20 @@ class PDFCaptureApp:
         
         # 이미지 표시 업데이트
         self.update_image_display()
+        
+        # 현재 페이지의 캡처 영역이 있는지 확인
+        current_page_captures = [rect for page_idx, rect in self.capture_data if page_idx == self.current_page_index]
+        if not current_page_captures:
+            # 캡처 영역이 없으면 안내 메시지 표시
+            self.show_capture_message()
+        else:
+            # 캡처 영역이 있으면 메시지 숨기기
+            if self.message_id:
+                self.canvas.delete(self.message_id)
+                self.message_id = None
+            if self.message_text_id:
+                self.canvas.delete(self.message_text_id)
+                self.message_text_id = None
 
     def update_image_display(self):
         if self.original_image:
@@ -206,10 +231,36 @@ class PDFCaptureApp:
             self.tk_image_tk = ImageTk.PhotoImage(img)
             self.canvas.delete("all")
             self.image_on_canvas = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image_tk)
+            
+            # 현재 페이지의 캡처 영역 가져오기
+            current_page_captures = [(page_idx, rect) for page_idx, rect in self.capture_data 
+                                   if page_idx == self.current_page_index]
+            
+            # 캡처 영역을 순서대로 그리기
+            self.rect_ids = []  # 이전 테두리 ID 초기화
+            for idx, (page_idx, rect) in enumerate(current_page_captures):
+                color = self.capture_colors[idx]  # 순서대로 색상 적용
+                # 확대/축소 비율을 고려하여 좌표 조정
+                x0 = rect.x0 * self.display_scale * self.zoom_scale
+                y0 = rect.y0 * self.display_scale * self.zoom_scale
+                x1 = rect.x1 * self.display_scale * self.zoom_scale
+                y1 = rect.y1 * self.display_scale * self.zoom_scale
+                rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2)
+                self.rect_ids.append(rect_id)
+            
             self.update_page_info()
             
-            # 이미지 업데이트 후 메시지 다시 표시
-            self.show_capture_message(new_width, new_height)
+            # 현재 페이지에 캡처 영역이 없으면 안내 메시지 표시
+            if not current_page_captures:
+                self.show_capture_message(new_width, new_height)
+            else:
+                # 캡처 영역이 있으면 메시지 숨기기
+                if self.message_id:
+                    self.canvas.delete(self.message_id)
+                    self.message_id = None
+                if self.message_text_id:
+                    self.canvas.delete(self.message_text_id)
+                    self.message_text_id = None
 
     def zoom_in(self):
         if self.zoom_scale < 3.0:  # 최대 300%까지 확대
@@ -241,6 +292,12 @@ class PDFCaptureApp:
             self.canvas.delete(self.message_text_id)
             self.message_text_id = None
         
+        # 현재 페이지의 캡처 개수 확인
+        current_page_captures = sum(1 for page_idx, _ in self.capture_data if page_idx == self.current_page_index)
+        if current_page_captures >= self.max_captures:
+            messagebox.showwarning("경고", "최대 2개의 영역만 캡처할 수 있습니다.")
+            return
+        
         self.rect_start = (event.x, event.y)
         if self.rect_id:
             self.canvas.delete(self.rect_id)
@@ -253,7 +310,10 @@ class PDFCaptureApp:
             if self.rect_id:
                 self.canvas.coords(self.rect_id, x0, y0, x1, y1)
             else:
-                self.rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline="red", width=2)
+                # 첫 번째 페이지의 캡처 개수에 따라 색상 결정
+                first_page_captures = sum(1 for page_idx, _ in self.capture_data if page_idx == 0)
+                color = self.capture_colors[first_page_captures]
+                self.rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2)
 
     def on_mouse_up(self, event):
         if self.rect_start:
@@ -263,36 +323,48 @@ class PDFCaptureApp:
             scale = 1 / (self.display_scale * self.zoom_scale)
             rect = fitz.Rect(min(x0, x1) * scale, min(y0, y1) * scale,
                              max(x0, x1) * scale, max(y0, y1) * scale)
-            self.capture_data.append((self.current_page_index, rect))
-            self.update_status(f"{self.current_page_index + 1}페이지에서 영역이 캡처되었습니다.")
+            
+            # 현재 페이지의 캡처 개수 확인
+            current_page_captures = sum(1 for page_idx, _ in self.capture_data if page_idx == self.current_page_index)
+            if current_page_captures < self.max_captures:
+                # 모든 페이지에 동일한 캡처 영역 저장
+                for page_idx in range(len(self.doc)):
+                    self.capture_data.append((page_idx, rect))
+                # 캡처 영역 테두리 ID 저장
+                if self.rect_id:
+                    self.rect_ids.append(self.rect_id)
+                self.update_status(f"캡처 영역이 모든 페이지에 적용되었습니다.")
             self.rect_start = None
+            self.rect_id = None
 
     def save_ppt(self):
         if not self.capture_data:
             messagebox.showwarning("경고", "선택한 영역이 없습니다.")
             return
 
-        first_page_rect = self.get_first_page_rect()
-        if not first_page_rect:
-            messagebox.showwarning("경고", "첫 번째 페이지에서 영역을 선택해주세요.")
-            return
-
         prs = Presentation()
-        # 모든 페이지에 대해 첫 번째 페이지의 선택 영역 적용
+        
+        # 각 페이지에 대해 해당 페이지의 캡처 영역 적용
         for page_index in range(len(self.doc)):
             page = self.doc.load_page(page_index)
-            pix = page.get_pixmap(clip=first_page_rect)
-            img_path = os.path.join(self.current_capture_dir, f"temp_capture_{page_index}.png")
-            pix.save(img_path)
+            
+            # 현재 페이지의 캡처 영역들 가져오기
+            current_page_rects = [rect for p_idx, rect in self.capture_data if p_idx == page_index]
+            
+            # 각 캡처 영역에 대해 별도의 슬라이드 생성
+            for capture_idx, rect in enumerate(current_page_rects):
+                pix = page.get_pixmap(clip=rect)
+                img_path = os.path.join(self.current_capture_dir, f"temp_capture_{page_index}_{capture_idx}.png")
+                pix.save(img_path)
 
-            slide = prs.slides.add_slide(prs.slide_layouts[6])
-            img = Image.open(img_path)
-            width_inch = img.width / 96
-            height_inch = img.height / 96
-            slide.shapes.add_picture(img_path, Inches(1), Inches(1),
-                                     width=Inches(width_inch), height=Inches(height_inch))
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                img = Image.open(img_path)
+                width_inch = img.width / 96
+                height_inch = img.height / 96
+                slide.shapes.add_picture(img_path, Inches(1), Inches(1),
+                                         width=Inches(width_inch), height=Inches(height_inch))
 
-        # PPT 파일도 캡처 폴더에 저장
+        # PPT 파일 저장
         default_ppt_name = os.path.join(self.current_capture_dir, "presentation.pptx")
         save_path = filedialog.asksaveasfilename(
             defaultextension=".pptx",
@@ -302,15 +374,6 @@ class PDFCaptureApp:
         if save_path:
             prs.save(save_path)
             messagebox.showinfo("저장 완료", f"PPT가 '{save_path}'에 저장되었습니다.")
-
-    def get_first_page_rect(self):
-        if not self.capture_data:
-            return None
-        # 첫 번째 페이지의 선택 영역 반환
-        for page_index, rect in self.capture_data:
-            if page_index == 0:
-                return rect
-        return None
 
     def show_capture_message(self, width=None, height=None):
         if self.message_id:
@@ -341,6 +404,20 @@ class PDFCaptureApp:
 
     def update_zoom_label(self):
         self.zoom_label.config(text=f"{int(self.zoom_scale * 100)}%")
+
+    def reset_captures(self):
+        """모든 캡처 영역을 초기화"""
+        # 모든 캡처 데이터 초기화
+        self.capture_data = []
+        
+        # 캔버스에서 모든 캡처 영역 테두리 제거
+        for rect_id in self.rect_ids:
+            self.canvas.delete(rect_id)
+        self.rect_ids = []
+        
+        # 이미지 다시 표시
+        self.update_image_display()
+        self.update_status("모든 캡처 영역이 초기화되었습니다.")
 
 if __name__ == "__main__":
     root = tk.Tk()
